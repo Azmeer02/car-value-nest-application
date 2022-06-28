@@ -1,22 +1,44 @@
-import { Body, Controller, Delete, Get, NotFoundException, Param, Patch, Post, Query } from '@nestjs/common';
+import { Body, Controller, Delete, Get, NotFoundException, Param, Patch, Post, Query, Session } from '@nestjs/common';
 import { UsersService } from './users.service';
 import { createUserDto } from './userDtos/createUser.dto';
 import { UpdateUserDto } from './userDtos/updateUser.dto'; 
 import { Serialize } from 'src/interceptors/serialize.interceptor';
 import { UserDto } from './userDtos/user.dto';
+import { AuthService } from './auth.service';
 
 @Controller('auth')
 @Serialize(UserDto)
 export class UsersController {
-    constructor(private userService : UsersService){}
+    constructor(private userService : UsersService, private authService: AuthService){}
+    @Get('/current-user')
+    user(@Session() session: any) {
+        return this.userService.findOne(session.userId);
+    }
+
+    @Post('/signout')
+    signout(@Session() session: any){
+        session.userId = null;
+    }
+
     @Post('/signup')
-    createUser(@Body() body: createUserDto){
-        this.userService.create(body.email, body.password);
+    async createUser(@Body() body: createUserDto, @Session() session: any){
+        const user = await this.authService.signUp(body.email, body.password);
+        session.userId = user.id;
+        return user;
+    }
+
+    @Post('/signin')
+    async logIn(@Body() body: createUserDto, @Session() session: any){
+        const user = await this.authService.signIn(body.email, body.password);
+        // console.log(session,"session")
+        // session.cookie = user.id;
+        session.userId = user.id;
+        console.log("🚀 ~ session.userId", session.userId)
+        return user;
     }
 
     @Get('/:id')
     async findOneUser(@Param('id') id: string){
-        console.log("Handler is running....")
         const oneUser = await this.userService.findOne(parseInt(id));
         if(!oneUser){
             throw new NotFoundException('User Not Found...!');
@@ -24,7 +46,6 @@ export class UsersController {
         return oneUser;
     }
     
-    // @UseInterceptors(SerializeInterceptor)
     @Get()
     findUserWithEmail(@Query('email') email: string){
         return this.userService.findByEmail(email);
